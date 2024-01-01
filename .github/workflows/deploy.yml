@@ -1,0 +1,84 @@
+
+name: Deploy to GAE
+
+# Controls when the workflow will run
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+
+# A workflow run is made up of one or more jobs that can run sequentially or in parallel
+jobs:
+  deploy:
+    name: Deploying to Google Cloud
+    runs-on: ubuntu-latest
+    ##### ANY SECRETS WHICH ARE TO BE SET AS ENV's ON UBUNTU LATEST IMAGE BEFORE DEPLOYMENT, THIS DOESNOT SET ENV's FOR APP ENGINE
+    env:
+      DB_NAME: ${{ secrets.DB_NAME}}
+      DB_USER: ${{ secrets.DB_USER}}
+      DB_PWD: ${{ secrets.DB_PWD}}
+      DB_HOST: ${{ secrets.DB_HOST}}
+      # DJANGO_SECRET_KEY: ${{ secrets.DJANGO_SECRET_KEY }}
+    #   DJANGO_SECRET_KEY: ${{ secrets.DJANGO_SECRET_KEY }}
+    #   GOOGLE_APP_CLIENT_ID: ${{ secrets.GOOGLE_APP_CLIENT_SECRET }}
+    #   GOOGLE_APP_KEY: ${{ secrets.GOOGLE_APP_KEY }}
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v2
+
+    ##### CREATE RUNTIME ENV FILE FOR DEPLOYMENT, AND ADD SERVICE-ACCOUNT-KEY.json IF NEEDED
+    - name: Creating Runtime .env and add service-account-key
+      run: |
+        touch .env
+        echo  DB_NAME="${{ secrets.DB_NAME }}" >> .env
+        echo  DB_USER="${{ secrets.DB_USER }}" >> .env
+        echo  DB_PWD="${{ secrets.DB_PWD }}" >> .env
+        echo  DB_HOST="${{ secrets.DB_HOST }}" >> .env
+        echo  DJANGO_SECRET_KEY="${{ secrets.DJANGO_SECRET_KEY }}" >> .env
+    #     echo  DJANGO_SECRET_KEY="${{ secrets.DJANGO_SECRET_KEY }}" >> .env
+    #     echo  BUCKET="${{ secrets.BUCKET }}" >> .env
+    #     echo  GOOGLE_APPLICATION_CREDENTIALS="./service-account-key.json"
+    #     touch service-account-key.json
+    #     echo "${{ secrets.GLOUD_FIRESTORE_KEY }}" >> service-account-key.json
+
+    - name: Setup python 3.8
+      uses: actions/setup-python@v2
+      with:
+       python-version: "3.8"
+    - name: Install Requirements
+      run: pip install -r requirements.txt
+
+
+    - name: Connect to gcloud
+      uses: google-github-actions/setup-gcloud@v0
+      with:
+        project_id: ${{ secrets.PROJECT_ID_MUZAMAL }}
+        service_account_key: ${{ secrets.SERVICE_ACCOUNT_MUZAMAL}}
+        export_default_credentials: true
+    - name: Gather Static Files
+      run: python manage.py collectstatic --noinput
+
+    ### CREATE RUNTIME MIGRATIONS, THIS MAY CAUSE SOME ERRORS IF MIGRATIONS FOLDER IS NOT MAINTAINED, REMOVE MIGRATIONS FOLDER NAME FROM .gitignore
+
+    # - name: Get Cloud SQL Proxy
+    #   run: |
+    #     wget https://dl.google.com/cloudsql/cloud_sql_proxy.linux.amd64 -O cloud_sql_proxy
+    #     chmod +x cloud_sql_proxy
+    # - name: Run Migrations
+    #   run: |
+    #       python manage.py makemigrations
+    #       python manage.py migrate
+
+
+    - name: Deploy to App Engine
+      id: deploy
+      uses: google-github-actions/deploy-appengine@v0.2.0
+      with:
+        deliverables: app.yaml
+        version: v1
+        project_id: ${{ secrets.PROJECT_ID_MUZAMAL }}
+        credentials: ${{ secrets.SERVICE_ACCOUNT_MUZAMAL }}
